@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sparrow's Privacy Policy Reader</title>
+  </head>
+  <body>
+    <main>
+      <h1>Sparrow's Privacy Policy Reader</h1>
+
+      <p>Current site: <strong id="domainText">...</strong></p>
+      <p>
+        Policy URL:
+        <a id="policyUrl" href="#" target="_blank" rel="noreferrer">not found yet</a>
+      </p>
+
+      <p>
+        <button id="findPolicyBtn">find policy on page</button> <br>
+        <button id="summarizeBtn">summarize policy</button> <br>
+        <button id="settingsBtn">settings</button>
+      </p>
+
+      <p id="status"></p>
+    </main>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

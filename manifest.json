@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Sparrow's Privacy Policy Reader",
+  "description": "Summarize website privacy policies.",
+  "action": {
+    "default_title": "Sparrow",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_page": "options.html",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ]
+}
