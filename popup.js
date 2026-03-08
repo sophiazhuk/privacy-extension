@@ -3,6 +3,7 @@ const policyUrlAnchor = document.getElementById("policyUrl");
 
 const statusText = document.getElementById("status");
 const findPolicyBtn = document.getElementById("findPolicyBtn");
+const summarizeBtn = document.getElementById("summarizeBtn");
 const settingsBtn = document.getElementById("settingsBtn");
 
 let activeTab;
@@ -10,6 +11,7 @@ let activeTab;
 init().catch((err) => setStatus(err.message, true));
 
 findPolicyBtn.addEventListener("click", onFindPolicyClicked);
+summarizeBtn.addEventListener("click", onSummarizeClicked);
 settingsBtn.addEventListener("click", () => chrome.runtime.openOptionsPage());
 
 async function init() {
@@ -39,6 +41,10 @@ async function onFindPolicyClicked() {
 
   setPolicyUrl(result.bestUrl);
   setStatus("policy URL detected.");
+}
+
+function onSummarizeClicked() {
+  setStatus("summarizer is a placeholder right now. implementation coming next.");
 }
 
 async function runtimeMessage(message) {
