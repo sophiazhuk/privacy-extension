@@ -27,9 +27,6 @@ body {
 
 main {
   padding: 12px;
-  background: #fff;
-  border: 1px solid var(--light-blue);
-  border-radius: 8px;
 }
 
 h1 {

@@ -18,7 +18,7 @@
 body {
   margin: 0;
   padding: 18px;
-  background: var(--off-white);
+  background: #fff;
   color: var(--dark-gray);
   font-family: var(--font-family-body);
 }
@@ -26,8 +26,6 @@ body {
 main {
   max-width: 680px;
   margin: 0 auto;
-  background: #fff;
-  border: 1px solid var(--light-blue);
   border-radius: 8px;
   padding: 16px;
 }
@@ -37,6 +35,9 @@ h1 {
   font-family: var(--font-family-heading);
   color: var(--dark-blue);
   font-size: 24px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--light-blue);
+
 }
 
 h2,
