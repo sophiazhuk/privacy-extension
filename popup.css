@@ -1,0 +1,130 @@
+@import url("https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600&family=Montserrat:wght@500;600;700&display=swap");
+
+:root {
+  --dark-blue: #003f87;
+  --blue: #0057b8;
+  --light-blue: #d9e8f8;
+  --dark-gray: #393939;
+  --gray: #a7a8aa;
+  --off-white: #f8f8f8;
+
+  --font-family-heading: "Montserrat", "Futura", "Trebuchet MS", sans-serif;
+  --font-family-body: "Fira Sans", "Helvetica Neue", "Arial", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 12px;
+  width: 360px;
+  background: var(--off-white);
+  color: var(--dark-gray);
+  font-family: var(--font-family-body);
+}
+
+main {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--light-blue);
+  border-radius: 8px;
+}
+
+h1 {
+  margin: 0 0 10px;
+  font-family: var(--font-family-heading);
+  font-size: 18px;
+  line-height: 1.2;
+  color: var(--dark-blue);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--light-blue);
+
+}
+
+h2,
+h3 {
+  margin: 14px 0 8px;
+  font-family: var(--font-family-heading);
+  color: var(--dark-blue);
+  font-size: 14px;
+}
+
+p {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+a {
+  color: var(--blue);
+  word-break: break-all;
+}
+
+button {
+  width: 100%;
+  margin-bottom: 8px;
+  border: 1px solid var(--dark-blue);
+  background: var(--dark-blue);
+  color: #fff;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-family: var(--font-family-heading);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform:capitalize;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.actions button:last-child {
+  margin-bottom: 0;
+}
+
+.panel-section {
+  border-top: 1px solid var(--light-blue);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+pre,
+#fetchedText {
+  margin: 0;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--light-blue);
+  border-radius: 4px;
+  background: #fcfdff;
+  padding: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#status {
+  margin-bottom: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--light-blue);
+  min-height: 18px;
+  color: var(--dark-gray);
+}
+
+#status.status-error {
+  color: #8b1d1d;
+}
+
+#status.status-success {
+  color: #1b5e20;
+}
