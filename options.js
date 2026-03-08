@@ -35,3 +35,9 @@ async function runtimeMessage(message) {
   }
   return response.data;
 }
+
+// update status message
+function setStatus(text, isError = false) {
+  status.textContent = text;
+  status.style.color = isError ? "red" : "black";
+}
