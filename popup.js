@@ -1,7 +1,10 @@
+import { sendPrompt } from "./ai.js";
+
 const domainText = document.getElementById("domainText");
 const policyUrlAnchor = document.getElementById("policyUrl");
 const statusText = document.getElementById("status");
 const fetchedText = document.getElementById("fetchedText");
+const aiOutput = document.getElementById("aiOutput");
 const findPolicyBtn = document.getElementById("findPolicyBtn");
 const summarizeBtn = document.getElementById("summarizeBtn");
 const settingsBtn = document.getElementById("settingsBtn");
@@ -83,9 +86,25 @@ async function onSummarizeClicked() {
       payload: { policyUrl }
     });
 
-    // keep this text preview before we add summarization
     fetchedText.textContent = data.cleanedText || "";
-    setStatus(`fetched ${data.cleanedLength} chars of cleaned text.`);
+    aiOutput.textContent = "";
+
+    const settings = await runtimeMessage({ type: "GET_SETTINGS" });
+    const apiKey = (settings?.apiKey || "").trim();
+
+    if (!apiKey) {
+      setStatus(`fetched ${data.cleanedLength} chars of cleaned text. add API key for Gemini.`);
+      hideManualUrlInput();
+      return;
+    }
+
+    setStatus("sending prompt to Gemini...");
+    const responseText = await sendPrompt({ apiKey });
+
+    // keep AI response
+    aiOutput.textContent = responseText || "empty response.";
+    setStatus("placeholder summary generated");
+
     hideManualUrlInput();
   } catch (error) {
     setStatus(error.message, true);
