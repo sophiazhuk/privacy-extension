@@ -1,7 +1,7 @@
 const domainText = document.getElementById("domainText");
 const policyUrlAnchor = document.getElementById("policyUrl");
-
 const statusText = document.getElementById("status");
+const fetchedText = document.getElementById("fetchedText");
 const findPolicyBtn = document.getElementById("findPolicyBtn");
 const summarizeBtn = document.getElementById("summarizeBtn");
 const settingsBtn = document.getElementById("settingsBtn");
@@ -10,50 +10,71 @@ let activeTab;
 
 init().catch((err) => setStatus(err.message, true));
 
+// find policy, fetch text preview, open extension settings
 findPolicyBtn.addEventListener("click", onFindPolicyClicked);
 summarizeBtn.addEventListener("click", onSummarizeClicked);
 settingsBtn.addEventListener("click", () => chrome.runtime.openOptionsPage());
 
 async function init() {
+  // grab active tab when popup opens
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-// init popup with current tab info
   if (!tab?.id || !tab.url) {
     throw new Error("no active tab URL available.");
   }
 
+  // store tab for later
   activeTab = tab;
   domainText.textContent = new URL(tab.url).hostname;
 }
 
 async function onFindPolicyClicked() {
-  // implement button click logic
+  // policy URL discovery entry point
   setStatus("scanning links for a privacy policy...");
 
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId: activeTab.id },
-    func: scanPolicyLinks
+    func: findPolicyUrlWithFallback
   });
 
+  // if all fallback stages fail, error
   if (!result?.bestUrl) {
-    setStatus("no policy link detected. Try navigating to the site footer.", true);
+    setStatus("no policy link detected on-page, homepage, or common paths.", true);
     return;
   }
 
   setPolicyUrl(result.bestUrl);
-  setStatus("policy URL detected.");
+
+  const stageLabel = {
+    page_scan: "current page",
+    homepage_scan: "homepage",
+    common_path_probe: "common path probe"
+  }[result.stage] || "fallback";
+
+  setStatus(`policy URL detected (${stageLabel}).`);
 }
 
-function onSummarizeClicked() {
-  setStatus("summarizer is a placeholder right now. implementation coming next.");
-}
-
-async function runtimeMessage(message) {
-  const response = await chrome.runtime.sendMessage(message);
-// send message to background and handle response
-  if (!response?.ok) {
-    throw new Error(response?.error ?? "runtime error.");
+async function onSummarizeClicked() {
+  // placeholder
+  const policyUrl = policyUrlAnchor.href;
+  if (!policyUrl || !policyUrl.startsWith("http")) {
+    setStatus("find a policy URL first.", true);
+    return;
   }
-  return response.data;
+
+  setStatus("fetching policy text...");
+
+  try {
+    const data = await runtimeMessage({
+      type: "FETCH_POLICY_TEXT",
+      payload: { policyUrl }
+    });
+
+    // keep this text preview before we add summarization
+    fetchedText.textContent = data.cleanedText || "";
+    setStatus(`fetched ${data.cleanedLength} chars of cleaned text.`);
+  } catch (error) {
+    setStatus(error.message, true);
+  }
 }
 
 function setPolicyUrl(url) {
@@ -68,25 +89,78 @@ function setStatus(text, isError = false) {
   statusText.style.color = isError ? "red" : "black";
 }
 
-function scanPolicyLinks() {
-  // implement actual scanning logic
-  // i have an idea -sophia
+async function runtimeMessage(message) {
+  const response = await chrome.runtime.sendMessage(message);
+  if (!response?.ok) {
+    throw new Error(response?.error ?? "runtime error.");
+  }
+  return response.data;
+}
+
+async function findPolicyUrlWithFallback() {
+  // fallback strategy
+  // 1. scan current page links
+  // 2. if no hit, scan homepage links
+  // 3. if still no hit, try common privacy paths
   const keywords = ["privacy", "privacy policy", "privacy notice", "data policy"];
-  const anchors = Array.from(document.querySelectorAll("a[href]"));
-  const candidates = anchors
-    .map((anchor) => {
-      const text = (anchor.textContent || "").trim().toLowerCase();
-      const href = anchor.getAttribute("href") || "";
-      const absoluteUrl = new URL(href, window.location.href).href;
-      const score = scoreAnchor(text, absoluteUrl, anchor);
-      return { href: absoluteUrl, score };
-    })
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score);
+  // used for fallback search for policy URL
+  const commonPaths = [
+    "/privacy",
+    "/privacy-policy",
+    "/privacy-notice",
+    "/privacy.html",
+    "/legal/privacy"
+  ];
 
-  return { bestUrl: candidates[0]?.href || "" };
+  const pageBest = pickBestFromAnchors(Array.from(document.querySelectorAll("a[href]")));
+  if (pageBest) {
+    return { bestUrl: pageBest, stage: "page_scan" };
+  }
 
-  function scoreAnchor(text, href, element) {
+  // homepage scan catches sites where privacy link appears only in root nav/footer
+  const homepageAnchors = await loadHomepageAnchors();
+  const homepageBest = pickBestFromAnchors(homepageAnchors);
+  if (homepageBest) {
+    return { bestUrl: homepageBest, stage: "homepage_scan" };
+  }
+
+  const origin = window.location.origin;
+  for (const path of commonPaths) {
+    // common URLs used by many sites
+    const url = new URL(path, origin).href;
+    if (await looksLikePolicyUrl(url)) {
+      return { bestUrl: url, stage: "common_path_probe" };
+    }
+  }
+
+  return { bestUrl: "", stage: "none" };
+
+  // some scoring script to choose most likely privacy policy
+  function pickBestFromAnchors(anchors) {
+    // score links in the scan step so detection stays deterministic
+    const candidates = anchors
+      .map((anchor) => {
+        const text = (anchor.textContent || "").trim().toLowerCase();
+        const href = anchor.getAttribute("href") || "";
+        let absoluteUrl = "";
+
+        try {
+          absoluteUrl = new URL(href, window.location.href).href;
+        } catch {
+          return null;
+        }
+
+        const score = scoreAnchor(text, absoluteUrl, anchor.closest("footer") !== null);
+        return { href: absoluteUrl, score };
+      })
+      .filter((item) => item && item.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    return candidates[0]?.href || "";
+  }
+
+  function scoreAnchor(text, href, inFooter) {
+    // choose explicit privacy words and footer/legal locations
     let score = 0;
     const loweredHref = href.toLowerCase();
 
@@ -94,9 +168,54 @@ function scanPolicyLinks() {
     if (keywords.some((keyword) => loweredHref.includes(keyword.replace(" ", "")))) score += 2;
     if (loweredHref.includes("/privacy")) score += 2;
     if (loweredHref.includes("policy")) score += 1;
-    if (element.closest("footer")) score += 2;
+    if (inFooter) score += 2;
+    // exclude non-http links
     if (!href.startsWith("http")) score = 0;
 
     return score;
+  }
+
+  async function loadHomepageAnchors() {
+    // retry from homepage since policies are sometimes linked there
+    // fetches homepage HTML and extracts all anchor links as fallback
+    try {
+      const homepageUrl = `${window.location.origin}/`;
+      // get homepage URL from current origin
+      const response = await fetch(homepageUrl, { credentials: "same-origin" });
+      if (!response.ok) {
+        return [];
+      }
+
+      const html = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      return Array.from(doc.querySelectorAll("a[href]"));
+    } catch {
+      // return empty array if homepage fetch fails
+      return [];
+    }
+  }
+
+  async function looksLikePolicyUrl(url) {
+    // basic validation so we dont get random legal or help pages
+    // checks content type and page keywords to confirm it's a privacy policy
+    try {
+      const response = await fetch(url, { method: "GET", credentials: "same-origin" });
+      if (!response.ok) {
+        return false;
+      }
+
+      const contentType = (response.headers.get("content-type") || "").toLowerCase();
+      // reject non text content
+      if (!(contentType.includes("text/html") || contentType.includes("text/plain") || contentType.includes("pdf"))) {
+        return false;
+      }
+
+      // sample first 3000 chars and check for privacy related words
+      const text = (await response.text()).slice(0, 3000).toLowerCase();
+      return keywords.some((keyword) => text.includes(keyword));
+    } catch {
+      return false;
+    }
   }
 }
