@@ -5,6 +5,9 @@ const fetchedText = document.getElementById("fetchedText");
 const findPolicyBtn = document.getElementById("findPolicyBtn");
 const summarizeBtn = document.getElementById("summarizeBtn");
 const settingsBtn = document.getElementById("settingsBtn");
+const manualUrlSection = document.getElementById("manualUrlSection");
+const manualPolicyUrlInput = document.getElementById("manualPolicyUrl");
+const manualUrlBtn = document.getElementById("manualUrlBtn");
 
 let activeTab;
 
@@ -14,6 +17,13 @@ init().catch((err) => setStatus(err.message, true));
 findPolicyBtn.addEventListener("click", onFindPolicyClicked);
 summarizeBtn.addEventListener("click", onSummarizeClicked);
 settingsBtn.addEventListener("click", () => chrome.runtime.openOptionsPage());
+manualUrlBtn.addEventListener("click", onManualUrlSubmit);
+manualPolicyUrlInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    onManualUrlSubmit();
+  }
+});
 
 async function init() {
   // grab active tab when popup opens
@@ -24,7 +34,8 @@ async function init() {
 
   // store tab for later
   activeTab = tab;
-  domainText.textContent = new URL(tab.url).hostname;
+  const hostname = new URL(tab.url).hostname;
+  domainText.textContent = hostname;
 }
 
 async function onFindPolicyClicked() {
@@ -39,10 +50,12 @@ async function onFindPolicyClicked() {
   // if all fallback stages fail, error
   if (!result?.bestUrl) {
     setStatus("no policy link detected on-page, homepage, or common paths.", true);
+    showManualUrlInput();
     return;
   }
 
   setPolicyUrl(result.bestUrl);
+  hideManualUrlInput();
 
   const stageLabel = {
     page_scan: "current page",
@@ -58,6 +71,7 @@ async function onSummarizeClicked() {
   const policyUrl = policyUrlAnchor.href;
   if (!policyUrl || !policyUrl.startsWith("http")) {
     setStatus("find a policy URL first.", true);
+    showManualUrlInput();
     return;
   }
 
@@ -72,8 +86,28 @@ async function onSummarizeClicked() {
     // keep this text preview before we add summarization
     fetchedText.textContent = data.cleanedText || "";
     setStatus(`fetched ${data.cleanedLength} chars of cleaned text.`);
+    hideManualUrlInput();
   } catch (error) {
     setStatus(error.message, true);
+    showManualUrlInput();
+  }
+}
+
+function onManualUrlSubmit() {
+  const typedValue = manualPolicyUrlInput.value.trim();
+  if (!typedValue) {
+    setStatus("enter a policy URL to continue.", true);
+    return;
+  }
+
+  try {
+    const normalizedUrl = normalizeManualUrl(typedValue);
+    setPolicyUrl(normalizedUrl);
+    setStatus("manual policy URL saved. you can now summarize.", false);
+    hideManualUrlInput();
+  } catch {
+    setStatus("invalid URL. enter a full http/https link.", true);
+    showManualUrlInput();
   }
 }
 
@@ -87,6 +121,23 @@ function setStatus(text, isError = false) {
   statusText.textContent = text;
 // Update status message in popup UI
   statusText.style.color = isError ? "red" : "black";
+}
+
+function showManualUrlInput() {
+  manualUrlSection.classList.remove("hidden");
+}
+
+function hideManualUrlInput() {
+  manualUrlSection.classList.add("hidden");
+}
+
+function normalizeManualUrl(value) {
+  const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  const parsed = new URL(withProtocol);
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error("bad protocol");
+  }
+  return parsed.href;
 }
 
 async function runtimeMessage(message) {

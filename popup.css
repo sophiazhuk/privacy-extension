@@ -54,9 +54,33 @@ p {
   line-height: 1.4;
 }
 
+label {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
 a {
   color: var(--blue);
   word-break: break-all;
+}
+
+input[type="url"],
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  border: 1px solid #9ab9de;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 0 0 8px;
+  font-family: var(--font-family-body);
+  font-size: 13px;
+}
+
+input:focus {
+  outline: 2px solid var(--light-blue);
+  border-color: var(--blue);
 }
 
 button {
@@ -93,6 +117,10 @@ button:disabled {
   border-top: 1px solid var(--light-blue);
   padding-top: 10px;
   margin-top: 10px;
+}
+
+.hidden {
+  display: none;
 }
 
 pre,
