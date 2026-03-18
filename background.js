@@ -53,7 +53,7 @@ async function saveSettings(patch) {
 }
 
 async function fetchPolicyText(policyUrl) {
-  // fetch endpoint for summarize placeholder (no llm call yet)
+  // fetch policy HTML and return both a readable text dump and smaller blocks for analysis
   if (!policyUrl || typeof policyUrl !== "string") {
     throw new Error("policy URL is required.");
   }
@@ -76,19 +76,20 @@ async function fetchPolicyText(policyUrl) {
   }
 
   const html = await response.text();
-  const cleanedText = extractTextFromHtml(html);
+  const extracted = extractTextFromHtml(html);
 
   return {
     policyUrl: parsedUrl.href,
     fetchedAt: new Date().toISOString(),
     rawLength: html.length,
-    cleanedLength: cleanedText.length,
-    cleanedText
+    cleanedLength: extracted.cleanedText.length,
+    cleanedText: extracted.cleanedText,
+    blocks: extracted.blocks
   };
 }
 
 function extractTextFromHtml(html) {
-  if (!html) return "";
+  if (!html) return { cleanedText: "", blocks: [] };
 
   // focus on where policy text usually is
   const likelyPolicyRegion = isolatePolicyRegion(html);
@@ -116,16 +117,70 @@ function extractTextFromHtml(html) {
 
   const noTags = structured.replace(/<[^>]+>/g, " ");
   const decoded = decodeHtmlEntities(noTags);
-
-  return decoded
-    // normalize whitespace and drop blanks and noise
+  const normalizedLines = decoded
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter((line) => line.length > 0)
-    .filter((line) => !isLikelyBannerLine(line))
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .slice(0, 50000);
+    .filter((line) => !isLikelyBannerLine(line));
+
+  // flat text version for debug output
+  const cleanedText = normalizedLines.join("\n").replace(/\n{3,}/g, "\n\n").slice(0, 50000);
+  const blocks = buildPolicyBlocks(normalizedLines);
+
+  return {
+    cleanedText,
+    blocks
+  };
+}
+
+function buildPolicyBlocks(lines) {
+  const blocks = [];
+  let currentSection = "General";
+  let pendingLines = [];
+
+  for (const line of lines) {
+    if (/^#{1,4}\s+/.test(line)) {
+      // headings reset the active section
+      flushPending();
+      currentSection = line.replace(/^#{1,4}\s+/, "").trim() || "General";
+      continue;
+    }
+
+    if (line.startsWith("- ")) {
+      // list items are usually meaningful
+      pendingLines.push(line.replace(/^-\s+/, ""));
+      flushPending();
+      continue;
+    }
+
+    pendingLines.push(line);
+    if (pendingLines.length >= 2 || line.length > 160) {
+      flushPending();
+    }
+  }
+
+  flushPending();
+
+  return blocks.slice(0, 200);
+
+  function flushPending() {
+    if (pendingLines.length === 0) {
+      return;
+    }
+
+    const text = pendingLines.join(" ").replace(/\s+/g, " ").trim();
+    pendingLines = [];
+
+    // skip tiny fragments so categories are based on actual policy statements
+    if (!text || text.length < 20) {
+      return;
+    }
+
+    blocks.push({
+      sectionTitle: currentSection,
+      text
+    });
+  }
 }
 
 function isolatePolicyRegion(html) {
