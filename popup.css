@@ -7,6 +7,11 @@
   --dark-gray: #393939;
   --gray: #a7a8aa;
   --off-white: #f8f8f8;
+  --cream: #fffdf8;
+  --green: #2e6a47;
+  --gold: #b38312;
+  --orange: #a35618;
+  --red: #8c2f39;
 
   --font-family-heading: "Montserrat", "Futura", "Trebuchet MS", sans-serif;
   --font-family-body: "Fira Sans", "Helvetica Neue", "Arial", sans-serif;
@@ -37,7 +42,6 @@ h1 {
   color: var(--dark-blue);
   padding-bottom: 6px;
   border-bottom: 1px solid var(--light-blue);
-
 }
 
 h2,
@@ -94,7 +98,7 @@ button {
   font-family: var(--font-family-heading);
   font-size: 13px;
   font-weight: 600;
-  text-transform:capitalize;
+  text-transform: capitalize;
   letter-spacing: 0.3px;
   cursor: pointer;
 }
@@ -109,10 +113,6 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.actions button:last-child {
-  margin-bottom: 0;
-}
-
 .panel-section {
   border-top: 1px solid var(--light-blue);
   padding-top: 10px;
@@ -124,7 +124,8 @@ button:disabled {
 }
 
 pre,
-#fetchedText {
+#fetchedText,
+#aiOutput {
   margin: 0;
   max-height: 200px;
   overflow: auto;
@@ -146,10 +147,109 @@ pre,
   color: var(--dark-gray);
 }
 
-#status.status-error {
-  color: #8b1d1d;
+#reportSummary,
+#reportCategories,
+#reportUnknowns {
+  display: grid;
+  gap: 8px;
 }
 
-#status.status-success {
-  color: #1b5e20;
+.report-hero {
+  border: 1px solid var(--light-blue);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #ffffff 0%, var(--cream) 100%);
+  padding: 10px;
+}
+
+.report-summary {
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.report-flags {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.report-card {
+  border: 1px solid var(--light-blue);
+  border-radius: 6px;
+  background: #fff;
+  padding: 0;
+}
+
+.report-card summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.report-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.category-name {
+  font-family: var(--font-family-heading);
+  font-size: 13px;
+  color: var(--dark-blue);
+}
+
+.grade-pill {
+  display: inline-block;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.grade-local {
+  background: var(--green);
+}
+
+.grade-processed {
+  background: var(--gold);
+}
+
+.grade-stored {
+  background: var(--orange);
+}
+
+.grade-shared {
+  background: var(--red);
+}
+
+.grade-unknown,
+.unclear-pill {
+  background: var(--gray);
+}
+
+.summary-line,
+.confidence-line,
+.report-examples,
+.detail-list,
+.evidence-toggle {
+  margin: 0 10px 10px;
+}
+
+.confidence-line {
+  font-size: 12px;
+  color: #5d6470;
+}
+
+.detail-list,
+.evidence-list {
+  padding-left: 18px;
+}
+
+.evidence-toggle summary {
+  padding: 0;
+  cursor: pointer;
+  color: var(--blue);
+  font-size: 12px;
+  font-family: var(--font-family-body);
 }

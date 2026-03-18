@@ -34,10 +34,23 @@
       </section>
 
       <p id="status"></p>
-      <h2>ai output</h2>
-      <pre id="aiOutput"></pre>
-      <h2>fetched policy text</h2>
-      <pre id="fetchedText"></pre>
+
+      <section id="reportPanel" class="panel-section hidden">
+        <h2>Privacy Report</h2>
+        <div id="reportSummary"></div>
+        <div id="reportCategories"></div>
+        <div id="reportUnknowns"></div>
+      </section>
+
+      <section class="panel-section">
+        <h2>ai output (for debugging)</h2>
+        <pre id="aiOutput"></pre>
+      </section>
+
+      <section class="panel-section">
+        <h2>fetched policy text (for debugging)</h2>
+        <pre id="fetchedText"></pre>
+      </section>
     </main>
 
     <script type="module" src="popup.js"></script>
