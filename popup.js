@@ -11,7 +11,6 @@ const reportSummary = document.getElementById("reportSummary");
 const reportCategories = document.getElementById("reportCategories");
 const reportUnknowns = document.getElementById("reportUnknowns");
 const findPolicyBtn = document.getElementById("findPolicyBtn");
-const summarizeBtn = document.getElementById("summarizeBtn");
 const settingsBtn = document.getElementById("settingsBtn");
 const manualUrlSection = document.getElementById("manualUrlSection");
 const manualPolicyUrlInput = document.getElementById("manualPolicyUrl");
@@ -23,7 +22,6 @@ init().catch((err) => setStatus(err.message, true));
 
 // find policy, fetch text preview, open extension settings
 findPolicyBtn.addEventListener("click", onFindPolicyClicked);
-summarizeBtn.addEventListener("click", onSummarizeClicked);
 settingsBtn.addEventListener("click", () => chrome.runtime.openOptionsPage());
 manualUrlBtn.addEventListener("click", onManualUrlSubmit);
 manualPolicyUrlInput.addEventListener("keydown", (event) => {
@@ -45,7 +43,6 @@ async function init() {
     activeTab = null;
     domainText.textContent = "unsupported page";
     findPolicyBtn.disabled = true;
-    summarizeBtn.disabled = true;
     setStatus("Open the extension on a normal http/https page.", true);
     return;
   }
@@ -68,6 +65,7 @@ async function onFindPolicyClicked() {
   // if all fallback stages fail, error
   if (!result?.bestUrl) {
     setStatus("no policy link detected on-page, homepage, or common paths.", true);
+    hideReportPanel();
     showManualUrlInput();
     return;
   }
@@ -81,14 +79,15 @@ async function onFindPolicyClicked() {
     common_path_probe: "common path probe"
   }[result.stage] || "fallback";
 
-  setStatus(`policy URL detected (${stageLabel}).`);
+  setStatus(`policy URL detected (${stageLabel}). fetching policy text...`);
+  await summarizeCurrentPolicy();
 }
 
-async function onSummarizeClicked() {
-  // summarize always goes through the llm rewrite step before showing the report
+async function summarizeCurrentPolicy() {
+  // once a policy URL is found, go straight into the llm-backed summarize flow
   const policyUrl = policyUrlAnchor.href;
   if (!policyUrl || !policyUrl.startsWith("http")) {
-    setStatus("find a policy URL first.", true);
+    setStatus("find and detect a policy URL first.", true);
     showManualUrlInput();
     return;
   }
