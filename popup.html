@@ -8,7 +8,10 @@
   </head>
   <body>
     <main>
-      <h1>Sparrow's Privacy Policy Reader</h1>
+      <div class="header-row">
+        <h1>Sparrow's Privacy Policy Reader</h1>
+        <button id="settingsBtn" class="settings-button" type="button" aria-label="Open settings">⋯</button>
+      </div>
 
       <p>Current site: <strong id="domainText">...</strong></p>
       <p>
@@ -18,8 +21,7 @@
 
       <p>
         <button id="findPolicyBtn">find policy on page</button> <br />
-        <button id="summarizeBtn">summarize policy</button> <br />
-        <button id="settingsBtn">settings</button>
+        <button id="summarizeBtn">summarize policy</button>
       </p>
 
       <section id="manualUrlSection" class="panel-section hidden">

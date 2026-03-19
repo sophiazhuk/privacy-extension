@@ -34,6 +34,13 @@ main {
   padding: 12px;
 }
 
+.header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 h1 {
   margin: 0 0 10px;
   font-family: var(--font-family-heading);
@@ -111,6 +118,20 @@ button:hover {
 button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.settings-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  margin-bottom: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 20px;
+  line-height: 1;
 }
 
 .panel-section {
