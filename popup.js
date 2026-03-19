@@ -1,10 +1,15 @@
 import { sendPrompt } from "./ai.js";
+import { buildPrivacyReport, renderPrivacyReport } from "./output-structure.js";
 
 const domainText = document.getElementById("domainText");
 const policyUrlAnchor = document.getElementById("policyUrl");
 const statusText = document.getElementById("status");
 const fetchedText = document.getElementById("fetchedText");
 const aiOutput = document.getElementById("aiOutput");
+const reportPanel = document.getElementById("reportPanel");
+const reportSummary = document.getElementById("reportSummary");
+const reportCategories = document.getElementById("reportCategories");
+const reportUnknowns = document.getElementById("reportUnknowns");
 const findPolicyBtn = document.getElementById("findPolicyBtn");
 const summarizeBtn = document.getElementById("summarizeBtn");
 const settingsBtn = document.getElementById("settingsBtn");
@@ -33,6 +38,16 @@ async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url) {
     throw new Error("no active tab URL available.");
+  }
+
+  const supportedUrl = /^https?:/i.test(tab.url);
+  if (!supportedUrl) {
+    activeTab = null;
+    domainText.textContent = "unsupported page";
+    findPolicyBtn.disabled = true;
+    summarizeBtn.disabled = true;
+    setStatus("Open the extension on a normal http/https page.", true);
+    return;
   }
 
   // store tab for later
@@ -70,7 +85,7 @@ async function onFindPolicyClicked() {
 }
 
 async function onSummarizeClicked() {
-  // placeholder
+  // summarize always goes through the llm rewrite step before showing the report
   const policyUrl = policyUrlAnchor.href;
   if (!policyUrl || !policyUrl.startsWith("http")) {
     setStatus("find a policy URL first.", true);
@@ -78,6 +93,7 @@ async function onSummarizeClicked() {
     return;
   }
 
+  hideReportPanel();
   setStatus("fetching policy text...");
 
   try {
@@ -86,27 +102,44 @@ async function onSummarizeClicked() {
       payload: { policyUrl }
     });
 
-    fetchedText.textContent = data.cleanedText || "";
+    const cleanedText = data.cleanedText || "";
+    fetchedText.textContent = cleanedText;
     aiOutput.textContent = "";
+
+    // build the internal report first, then let Gemini rewrite it into the final user-facing version
+    const fallbackReport = buildPrivacyReport({ policyText: cleanedText, blocks: data.blocks || [] });
 
     const settings = await runtimeMessage({ type: "GET_SETTINGS" });
     const apiKey = (settings?.apiKey || "").trim();
 
     if (!apiKey) {
-      setStatus(`fetched ${data.cleanedLength} chars of cleaned text. add API key for Gemini.`);
+      aiOutput.textContent = "Add a valid Gemini API key in settings to generate the privacy report.";
+      setStatus("Add a valid Gemini API key in settings.", true);
       hideManualUrlInput();
       return;
     }
 
-    setStatus("sending prompt to Gemini...");
-    const responseText = await sendPrompt({ apiKey });
+    setStatus("sending policy text to Gemini...");
 
-    // keep AI response
-    aiOutput.textContent = responseText || "empty response.";
-    setStatus("placeholder summary generated");
+    try {
+      const result = await sendPrompt({ apiKey, baseReport: fallbackReport });
+      renderPrivacyReport(result.report, {
+        reportPanel,
+        reportSummary,
+        reportCategories,
+        reportUnknowns
+      });
+      aiOutput.textContent = result.rawText || "Gemini returned an empty response.";
+      setStatus("Gemini report loaded.");
+    } catch (error) {
+      hideReportPanel();
+      aiOutput.textContent = `Gemini request failed. Check your API key in settings.\n\n${error.message}`;
+      setStatus("Gemini request failed. Check your API key in settings.", true);
+    }
 
     hideManualUrlInput();
   } catch (error) {
+    hideReportPanel();
     setStatus(error.message, true);
     showManualUrlInput();
   }
@@ -148,6 +181,14 @@ function showManualUrlInput() {
 
 function hideManualUrlInput() {
   manualUrlSection.classList.add("hidden");
+}
+
+function hideReportPanel() {
+  // clear the previous report whenever summarize cannot complete the llm step
+  reportPanel.classList.add("hidden");
+  reportSummary.innerHTML = "";
+  reportCategories.innerHTML = "";
+  reportUnknowns.innerHTML = "";
 }
 
 function normalizeManualUrl(value) {
