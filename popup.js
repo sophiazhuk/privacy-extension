@@ -166,7 +166,8 @@ async function summarizeCurrentPolicy() {
       heuristic: {
         categoryCount: Array.isArray(fallbackReport.categories) ? fallbackReport.categories.length : 0,
         unknownCount: Array.isArray(fallbackReport.unknowns) ? fallbackReport.unknowns.length : 0,
-        topSummary: fallbackReport.top_summary || ""
+        topSummary: fallbackReport.top_summary || "",
+        categories: summarizeDebugCategories(fallbackReport.categories)
       }
     });
 
@@ -200,12 +201,17 @@ async function summarizeCurrentPolicy() {
       gemini: {
         status: "started",
         apiKeyPresent: true,
-        apiKeyLength: apiKey.length
+        apiKeyLength: apiKey.length,
+        sourceBlockCount: Array.isArray(data.blocks) ? data.blocks.length : 0
       }
     });
 
     try {
-      const result = await sendPrompt({ apiKey, baseReport: fallbackReport });
+      const result = await sendPrompt({
+        apiKey,
+        baseReport: fallbackReport,
+        blocks: data.blocks || []
+      });
       renderPrivacyReport(result.report, {
         reportPanel,
         reportSummary,
@@ -220,12 +226,15 @@ async function summarizeCurrentPolicy() {
           apiKeyPresent: true,
           apiKeyLength: apiKey.length,
           model: result.model || "",
-          rawTextLength: (result.rawText || "").length
+          promptBlockCount: result.promptBlockCount || 0,
+          rawTextLength: (result.rawText || "").length,
+          proposedCategories: summarizeDebugCategories(result.proposedCategories)
         },
         renderedReport: {
           categoryCount: Array.isArray(result.report?.categories) ? result.report.categories.length : 0,
           unknownCount: Array.isArray(result.report?.unknowns) ? result.report.unknowns.length : 0,
-          topSummary: result.report?.top_summary || ""
+          topSummary: result.report?.top_summary || "",
+          categories: summarizeDebugCategories(result.report?.categories)
         }
       });
     } catch (error) {
@@ -357,6 +366,22 @@ function setDebugState(partialState) {
     reportVisible: !reportPanel.classList.contains("hidden")
   };
   debugDump.value = JSON.stringify(lastDebugState, null, 2);
+}
+
+function summarizeDebugCategories(categories) {
+  if (!Array.isArray(categories)) {
+    return [];
+  }
+
+  return categories.map((category) => ({
+    name: String(category?.name || ""),
+    grade: String(category?.grade || ""),
+    confidence: String(category?.confidence || ""),
+    gradeModifier: String(category?.grade_modifier || ""),
+    summaryLine: String(category?.summary_line || ""),
+    exampleCount: Array.isArray(category?.examples) ? category.examples.length : 0,
+    evidenceCount: Array.isArray(category?.evidence) ? category.evidence.length : 0
+  }));
 }
 
 async function findPolicyUrlWithFallback() {

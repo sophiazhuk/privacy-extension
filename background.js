@@ -266,6 +266,7 @@ function runExtractionCandidate(html, options) {
 
   const cleanedText = normalizedLines.join("\n").replace(/\n{3,}/g, "\n\n").slice(0, 50000);
   const blocks = buildPolicyBlocks(normalizedLines);
+  const topLines = normalizedLines.slice(0, 20);
 
   return {
     cleanedText,
@@ -281,6 +282,10 @@ function runExtractionCandidate(html, options) {
       lineCount: normalizedLines.length,
       cleanedLength: cleanedText.length,
       blockCount: blocks.length,
+      navTermHits: countPatternHits(topLines.join("\n"), NAV_NOISE_PATTERNS),
+      policyKeywordHits: countPatternHits(cleanedText.slice(0, 4000), POLICY_SIGNAL_PATTERNS),
+      repeatedTopLineCount: countRepeatedLines(topLines),
+      shortTopLineCount: topLines.filter((line) => line.length < 30).length,
       snippet: cleanedText.slice(0, 200)
     }
   };
@@ -292,10 +297,20 @@ function chooseBestExtraction(candidates) {
 }
 
 function scoreExtractionCandidate(candidate) {
-  const lineScore = Math.min(candidate.meta.lineCount, 200);
-  const blockScore = candidate.meta.blockCount * 80;
-  const textScore = Math.min(candidate.cleanedText.length, 50000);
-  return textScore + blockScore + lineScore;
+  const textScore = Math.min(candidate.cleanedText.length, 25000);
+  const blockScore = candidate.meta.blockCount * 120;
+  const lineScore = Math.min(candidate.meta.lineCount, 160) * 6;
+  const policyScore = candidate.meta.policyKeywordHits * 350;
+  const cleanStrategyBonus = candidate.meta.strategy === "isolated-clean"
+    ? 600
+    : candidate.meta.strategy === "body-clean"
+      ? 300
+      : 0;
+  const navPenalty = candidate.meta.navTermHits * 450;
+  const repetitionPenalty = candidate.meta.repeatedTopLineCount * 180;
+  const shortLinePenalty = candidate.meta.shortTopLineCount * 20;
+
+  return textScore + blockScore + lineScore + policyScore + cleanStrategyBonus - navPenalty - repetitionPenalty - shortLinePenalty;
 }
 
 function getBodyRegion(html) {
@@ -330,4 +345,54 @@ function stripStructuralNoise(html) {
 function extractTitle(html) {
   const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   return match?.[1] ? decodeHtmlEntities(match[1].replace(/\s+/g, " ").trim()) : "";
+}
+
+const NAV_NOISE_PATTERNS = [
+  /view your profile/i,
+  /wallet/i,
+  /wishlist/i,
+  /points shop/i,
+  /discovery queue/i,
+  /broadcasts/i,
+  /community/i,
+  /try chatgpt/i,
+  /\blog in\b/i,
+  /\bsign in\b/i,
+  /overview/i,
+  /faq/i
+];
+
+const POLICY_SIGNAL_PATTERNS = [
+  /privacy policy/i,
+  /we collect/i,
+  /personal data/i,
+  /personal information/i,
+  /payment/i,
+  /transaction/i,
+  /cookies/i,
+  /who has access/i,
+  /how long we store/i,
+  /retain/i,
+  /share/i,
+  /delete/i,
+  /your rights/i
+];
+
+function countPatternHits(text, patterns) {
+  return patterns.reduce((count, pattern) => count + (pattern.test(text) ? 1 : 0), 0);
+}
+
+function countRepeatedLines(lines) {
+  const seen = new Set();
+  let repeats = 0;
+
+  for (const line of lines.map((line) => line.toLowerCase())) {
+    if (seen.has(line)) {
+      repeats += 1;
+      continue;
+    }
+    seen.add(line);
+  }
+
+  return repeats;
 }

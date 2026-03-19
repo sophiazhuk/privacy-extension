@@ -10,8 +10,24 @@ const CATEGORY_DEFS = [
   {
     name: "Confidential Data",
     sensitivity: 7,
-    terms: [/username/i, /password/i, /credential/i, /payment card/i, /financial/i, /credit card/i, /debit card/i, /health/i, /medical/i, /bank/i],
-    examples: ["username", "passwords", "payment card info", "financial info", "health info"]
+    terms: [
+      /username/i,
+      /password/i,
+      /credential/i,
+      /payment card/i,
+      /payment data/i,
+      /payment method/i,
+      /transaction and payment data/i,
+      /transaction data/i,
+      /billing/i,
+      /financial/i,
+      /credit card/i,
+      /debit card/i,
+      /health/i,
+      /medical/i,
+      /bank/i
+    ],
+    examples: ["username", "passwords", "payment card info", "transaction data", "billing info", "financial info", "health info"]
   },
   {
     name: "Personal Information",
@@ -34,8 +50,24 @@ const CATEGORY_DEFS = [
   {
     name: "Location Data",
     sensitivity: 5,
-    terms: [/precise location/i, /location information/i, /geographic information/i, /gps/i, /geolocation/i, /cell tower/i, /wi-?fi hotspot/i],
-    examples: ["precise location", "GPS", "cell tower location", "Wi-Fi hotspot location"]
+    terms: [
+      /precise location/i,
+      /location information/i,
+      /geographic information/i,
+      /geographic location/i,
+      /approximate location/i,
+      /ip address/i,
+      /where you are located/i,
+      /country or state/i,
+      /country of residence/i,
+      /gps/i,
+      /geolocation/i,
+      /cell tower/i,
+      /wi-?fi hotspot/i,
+      /content delivery/i,
+      /deliver content/i
+    ],
+    examples: ["precise location", "approximate location", "country", "region", "GPS", "cell tower location", "Wi-Fi hotspot location"]
   },
   {
     name: "Camera and Microphone",
@@ -210,6 +242,23 @@ function analyzeCategory(category, blocks) {
 
   const grade = highestBucketGrade(actionBuckets);
   if (!grade) {
+    if (category.name === "Location Data" && categoryBlocks.some((block) => hasApproximateLocationCue(block.text))) {
+      return {
+        name: category.name,
+        grade: "Processed But Not Stored",
+        grade_modifier: "",
+        summary_line: "Location Data appears to be used in an approximate way, such as country or IP-based delivery.",
+        examples: collectExamples(categoryBlocks, category),
+        details: [
+          "The policy mentions location-related handling, but it does not clearly describe precise location collection.",
+          "This looks more like approximate or IP-based location use than exact GPS-style tracking."
+        ],
+        evidence: categoryBlocks.slice(0, 3).map(formatEvidenceLine),
+        confidence: "partially clear",
+        sensitivity: category.sensitivity
+      };
+    }
+
     return {
       ...emptyCategory(category, `${category.name} is mentioned, but the policy does not clearly explain what happens to it.`),
       examples: collectExamples(categoryBlocks, category),
@@ -463,6 +512,10 @@ function collectExamples(blocks, category) {
 
 function isVague(text) {
   return VAGUE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function hasApproximateLocationCue(text) {
+  return /(ip address|country|region|geographic location|content delivery|deliver content|localized content)/i.test(text);
 }
 
 function formatEvidenceLine(block) {

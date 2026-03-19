@@ -1,7 +1,15 @@
-import { categoryDefinitions, normalizePrivacyReport } from "./output-structure.js";
+import {
+  buildInterpretationPrompt,
+  buildPromptBlocks,
+  mergeInterpretation,
+  stripCodeFence,
+  validateModelInterpretation
+} from "./ai-report-interpretation.js";
+import { normalizePrivacyReport } from "./output-structure.js";
 
-export async function sendPrompt({ apiKey, baseReport }) {
-  // fail if settings are missing
+const MODEL = "gemini-2.5-flash-lite";
+
+export async function sendPrompt({ apiKey, baseReport, blocks }) {
   if (!apiKey) {
     throw new Error("missing API key");
   }
@@ -10,31 +18,20 @@ export async function sendPrompt({ apiKey, baseReport }) {
     throw new Error("missing base report");
   }
 
-  // lightweight model for now
-  const model = "gemini-2.5-flash-lite";
-  const endpoint =
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
-    `?key=${encodeURIComponent(apiKey)}`;
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    throw new Error("missing policy blocks");
+  }
 
-  // model to rewrite existing report
-  const categoryNames = categoryDefinitions().map((category) => category.name).join(", ");
-  const prompt = [
-    "Return only valid JSON.",
-    "Rewrite the user-facing privacy report text in plain language.",
-    "Do not change category names, grades, grade modifiers, examples, evidence, or confidence values.",
-    "Only rewrite summary_line and details for the existing categories, and optionally rewrite unknowns.",
-    `Keep these category names exactly: ${categoryNames}`,
-    "JSON shape:",
-    '{"categories":[{"name":"","summary_line":"","details":[""]}],"unknowns":[""]}',
-    "Base report JSON:",
-    JSON.stringify(baseReport)
-  ].join("\n\n");
+  const promptBlocks = buildPromptBlocks(blocks);
+  if (promptBlocks.length === 0) {
+    throw new Error("no usable policy blocks for Gemini");
+  }
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(buildEndpoint(apiKey), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      contents: [{ role: "user", parts: [{ text: buildInterpretationPrompt(promptBlocks) }] }],
       generationConfig: {
         temperature: 0.1,
         responseMimeType: "application/json"
@@ -42,7 +39,6 @@ export async function sendPrompt({ apiKey, baseReport }) {
     })
   });
 
-  // if bad response, then print error message
   const body = await response.json();
   if (!response.ok) {
     throw new Error(body?.error?.message || `${response.status}`);
@@ -50,65 +46,20 @@ export async function sendPrompt({ apiKey, baseReport }) {
 
   const responseText = body?.candidates?.[0]?.content?.parts?.[0]?.text || "";
   const parsed = JSON.parse(stripCodeFence(responseText));
-  validateModelRewrite(parsed, baseReport);
+  validateModelInterpretation(parsed, promptBlocks);
 
   return {
-    model,
+    model: MODEL,
+    promptBlockCount: promptBlocks.length,
     rawText: responseText,
-    report: normalizePrivacyReport(mergeRewrites(baseReport, parsed))
+    proposedCategories: Array.isArray(parsed?.categories) ? parsed.categories : [],
+    report: normalizePrivacyReport(mergeInterpretation(baseReport, parsed, promptBlocks))
   };
 }
 
-function validateModelRewrite(report, baseReport) {
-  // one rewrite entry per category so missing text does not silently drop report content
-  const expectedCategories = categoryDefinitions().map((category) => category.name);
-  if (!Array.isArray(report?.categories) || report.categories.length !== expectedCategories.length) {
-    throw new Error("Gemini did not return rewrite text for the full category set.");
-  }
-
-  for (const expectedName of expectedCategories) {
-    const rewrite = report.categories.find((item) => String(item?.name || "").trim() === expectedName);
-    const baseCategory = baseReport.categories.find((item) => item.name === expectedName);
-
-    if (!rewrite || !baseCategory) {
-      throw new Error(`Gemini missing category rewrite: ${expectedName}`);
-    }
-
-    if (!String(rewrite.summary_line || "").trim()) {
-      throw new Error(`Gemini missing summary text for ${expectedName}.`);
-    }
-
-    const details = Array.isArray(rewrite.details) ? rewrite.details.filter((item) => String(item || "").trim()) : [];
-    if (details.length === 0) {
-      throw new Error(`Gemini missing details for ${expectedName}.`);
-    }
-  }
-}
-
-function mergeRewrites(baseReport, rewriteReport) {
-  // only copy the rewritten wording back in
-  return {
-    ...baseReport,
-    categories: baseReport.categories.map((category) => {
-      const rewrite = rewriteReport.categories.find((item) => String(item?.name || "").trim() === category.name);
-      return {
-        ...category,
-        summary_line: String(rewrite?.summary_line || "").trim() || category.summary_line,
-        details: Array.isArray(rewrite?.details)
-          ? rewrite.details.map((item) => String(item || "").trim()).filter(Boolean)
-          : category.details
-      };
-    }),
-    unknowns: Array.isArray(rewriteReport?.unknowns)
-      ? rewriteReport.unknowns.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 6)
-      : baseReport.unknowns
-  };
-}
-
-function stripCodeFence(text) {
-  return String(text)
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```$/i, "")
-    .trim();
+function buildEndpoint(apiKey) {
+  return (
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent` +
+    `?key=${encodeURIComponent(apiKey)}`
+  );
 }
