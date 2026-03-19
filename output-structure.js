@@ -22,13 +22,13 @@ const CATEGORY_DEFS = [
   {
     name: "Device Files",
     sensitivity: 5,
-    terms: [/uploaded files?/i, /submitted content/i, /research papers?/i, /class assignments?/i, /school projects?/i, /videos?/i, /photos?/i, /images?/i, /documents?/i, /uploads?/i],
+    terms: [/uploaded files?/i, /submitted content/i, /research papers?/i, /class assignments?/i, /school projects?/i, /documents?/i, /uploads?/i, /post content/i],
     examples: ["uploaded files", "documents", "photos", "videos", "assignments"]
   },
   {
     name: "Communication History and Logs",
     sensitivity: 4,
-    terms: [/messages?/i, /email content/i, /chat/i, /discussion group comments?/i, /comments?/i, /communications?/i, /private messages?/i, /log history/i],
+    terms: [/messages?/i, /email content/i, /chat/i, /discussion group comments?/i, /communications?/i, /private messages?/i, /log history/i, /interactions with us/i],
     examples: ["messages", "email content", "comments", "chat logs"]
   },
   {
@@ -40,7 +40,7 @@ const CATEGORY_DEFS = [
   {
     name: "Camera and Microphone",
     sensitivity: 5,
-    terms: [/camera/i, /microphone/i, /voice recordings?/i, /video images?/i, /audio/i, /video capture/i],
+    terms: [/camera/i, /microphone/i, /voice recordings?/i, /video images?/i, /microphone access/i, /camera access/i],
     examples: ["video images", "voice recordings", "camera access", "microphone access"]
   },
   {
@@ -53,21 +53,10 @@ const CATEGORY_DEFS = [
 
 const ACTION_PATTERNS = {
   "Shared with Third Party": [
-    /share/i,
-    /disclos/i,
     /viewable by other users/i,
     /searchable by other users/i,
     /publicly available/i,
-    /accessible to other users/i,
-    /service provider/i,
-    /affiliate/i,
-    /subsidiar/i,
-    /third part/i,
-    /employer partners?/i,
-    /social networking platforms?/i,
-    /academic institution/i,
-    /fellow students?/i,
-    /parents of students/i
+    /accessible to other users/i
   ],
   Stored: [
     /retain/i,
@@ -77,8 +66,6 @@ const ACTION_PATTERNS = {
     /archive/i,
     /save/i,
     /hold/i,
-    /collect/i,
-    /gather/i,
     /record/i
   ],
   "Processed But Not Stored": [
@@ -111,6 +98,21 @@ const VAGUE_PATTERNS = [/may share/i, /may retain/i, /as necessary/i, /for as lo
 const SHARING_SECTION_PATTERNS = [/disclosure/i, /sharing/i, /third.?party/i, /recipient/i];
 const COLLECTION_SECTION_PATTERNS = [/information collection/i, /personal information/i, /device information/i, /user communications/i, /product usage information/i];
 const USE_SECTION_PATTERNS = [/use of your information/i, /how we use/i, /our use/i];
+const SHARING_VERB_PATTERNS = [/share/i, /disclos/i, /make available/i, /transfer/i, /provide to/i];
+const SHARING_RECIPIENT_PATTERNS = [
+  /service providers?/i,
+  /affiliates?/i,
+  /subsidiar/i,
+  /third part/i,
+  /employer partners?/i,
+  /social networking platforms?/i,
+  /academic institutions?/i,
+  /fellow students?/i,
+  /parents of students/i,
+  /other users/i,
+  /public/i
+];
+const COLLECTION_VERB_PATTERNS = [/collect/i, /gather/i];
 
 export function buildPrivacyReport(input) {
   // accept either raw text or the extracted block payload from background
@@ -256,8 +258,8 @@ function classifyBlockAction(block) {
     return "Stored";
   }
 
-  if (COLLECTION_SECTION_PATTERNS.some((pattern) => pattern.test(sectionText))) {
-    return "Stored";
+  if (COLLECTION_VERB_PATTERNS.some((pattern) => pattern.test(localText)) || COLLECTION_SECTION_PATTERNS.some((pattern) => pattern.test(sectionText))) {
+    return "Processed But Not Stored";
   }
 
   if (ACTION_PATTERNS["Processed But Not Stored"].some((pattern) => pattern.test(localText))) {
@@ -272,7 +274,11 @@ function classifyBlockAction(block) {
 }
 
 function hasLocalSharingCue(text) {
-  return ACTION_PATTERNS["Shared with Third Party"].some((pattern) => pattern.test(text));
+  const directShare = ACTION_PATTERNS["Shared with Third Party"].some((pattern) => pattern.test(text));
+  const recipientShare = SHARING_VERB_PATTERNS.some((pattern) => pattern.test(text))
+    && SHARING_RECIPIENT_PATTERNS.some((pattern) => pattern.test(text));
+
+  return directShare || recipientShare;
 }
 
 function highestBucketGrade(actionBuckets) {
@@ -387,7 +393,7 @@ function buildUnknowns(categories, blocks, lines) {
     unknowns.push("Retention is mentioned, but the policy does not clearly explain how long data is kept.");
   }
 
-  if (blocks.some((block) => /share|disclos/i.test(block.text)) && !blocks.some((block) => /service provider|affiliate|subsidiar|academic institution|fellow students|parents of students|other users|public/i.test(block.text))) {
+  if (blocks.some((block) => SHARING_VERB_PATTERNS.some((pattern) => pattern.test(block.text))) && !blocks.some((block) => hasLocalSharingCue(block.text.toLowerCase()))) {
     unknowns.push("Sharing is mentioned, but the policy does not clearly say who receives the data.");
   }
 
