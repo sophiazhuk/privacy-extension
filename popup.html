@@ -42,15 +42,28 @@
         <div id="reportCategories"></div>
         <div id="reportUnknowns"></div>
       </section>
-      <section class="panel-section">
-        <h2>ai output (for debugging)</h2>
-        <pre id="aiOutput"></pre>
-      </section>
 
-      <section class="panel-section">
-        <h2>fetched policy text (for debugging)</h2>
-        <pre id="fetchedText"></pre>
-      </section>
+      <details class="panel-section debug-panel">
+        <summary>Debug Info</summary>
+
+        <section class="debug-section">
+          <div class="debug-header">
+            <h2>debug dump</h2>
+            <button id="copyDebugBtn" class="secondary-button" type="button">copy</button>
+          </div>
+          <textarea id="debugDump" readonly spellcheck="false"></textarea>
+        </section>
+
+        <section class="debug-section">
+          <h2>ai output</h2>
+          <pre id="aiOutput"></pre>
+        </section>
+
+        <section class="debug-section">
+          <h2>fetched policy text</h2>
+          <pre id="fetchedText"></pre>
+        </section>
+      </details>
     </main>
 
     <script type="module" src="popup.js"></script>

@@ -140,6 +140,68 @@ button:disabled {
   margin-top: 10px;
 }
 
+.debug-panel {
+  padding-top: 0;
+}
+
+.debug-panel summary {
+  cursor: pointer;
+  padding-top: 10px;
+  font-family: var(--font-family-heading);
+  font-size: 13px;
+  color: var(--dark-blue);
+}
+
+.debug-panel[open] summary {
+  margin-bottom: 10px;
+}
+
+.debug-section + .debug-section {
+  margin-top: 10px;
+}
+
+.debug-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.debug-header h2 {
+  margin: 0;
+}
+
+.secondary-button {
+  width: auto;
+  min-width: 58px;
+  margin-bottom: 0;
+  padding: 6px 10px;
+  border-color: var(--blue);
+  background: #fff;
+  color: var(--blue);
+  font-size: 12px;
+}
+
+.secondary-button:hover {
+  background: var(--light-blue);
+  border-color: var(--blue);
+}
+
+#debugDump {
+  width: 100%;
+  min-height: 180px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--light-blue);
+  border-radius: 4px;
+  background: #fcfdff;
+  color: var(--dark-gray);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
 .hidden {
   display: none;
 }

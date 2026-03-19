@@ -77,59 +77,72 @@ async function fetchPolicyText(policyUrl) {
 
   const html = await response.text();
   const extracted = extractTextFromHtml(html);
+  const contentType = (response.headers.get("content-type") || "").toLowerCase();
 
   return {
-    policyUrl: parsedUrl.href,
+    policyUrl: response.url || parsedUrl.href,
     fetchedAt: new Date().toISOString(),
+    contentType,
     rawLength: html.length,
     cleanedLength: extracted.cleanedText.length,
+    title: extracted.title,
     cleanedText: extracted.cleanedText,
-    blocks: extracted.blocks
+    blocks: extracted.blocks,
+    extraction: extracted.extraction
   };
 }
 
 function extractTextFromHtml(html) {
-  if (!html) return { cleanedText: "", blocks: [] };
+  if (!html) {
+    return {
+      title: "",
+      cleanedText: "",
+      blocks: [],
+      extraction: {
+        strategy: "none",
+        title: "",
+        htmlLength: 0,
+        candidateCount: 0,
+        candidates: []
+      }
+    };
+  }
 
-  // focus on where policy text usually is
-  const likelyPolicyRegion = isolatePolicyRegion(html);
+  const title = extractTitle(html);
+  const candidates = [
+    // try the focused legal/article region first
+    runExtractionCandidate(html, {
+      strategy: "isolated-clean",
+      isolateRegion: true,
+      stripStructuralNoise: true
+    }),
+    // if that is too aggressive, retry against the full body
+    runExtractionCandidate(html, {
+      strategy: "body-clean",
+      isolateRegion: false,
+      stripStructuralNoise: true
+    }),
+    // last resort: preserve nearly all body text instead of returning nothing
+    runExtractionCandidate(html, {
+      strategy: "body-fallback",
+      isolateRegion: false,
+      stripStructuralNoise: false
+    })
+  ];
 
-  const withoutNoiseBlocks = likelyPolicyRegion
-    // remove non-content tags first
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
-    .replace(/<(nav|footer|header|aside|form|button|dialog)[^>]*>[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<(div|section|aside)[^>]*(cookie|consent|gdpr|ccpa|onetrust|trustarc)[^>]*>[\s\S]*?<\/\1>/gi, " ");
-
-  // keep structure markers so later chunking/summaries have better context
-  const structured = withoutNoiseBlocks
-    .replace(/<h1[^>]*>/gi, "\n\n# ")
-    .replace(/<h2[^>]*>/gi, "\n\n## ")
-    .replace(/<h3[^>]*>/gi, "\n\n### ")
-    .replace(/<h4[^>]*>/gi, "\n\n#### ")
-    .replace(/<\/h[1-6]>/gi, "\n")
-    .replace(/<li[^>]*>/gi, "\n- ")
-    .replace(/<\/li>/gi, "\n")
-    .replace(/<(p|div|section|article|ul|ol|br)[^>]*>/gi, "\n")
-    .replace(/<\/(p|div|section|article|ul|ol|br)>/gi, "\n");
-
-  const noTags = structured.replace(/<[^>]+>/g, " ");
-  const decoded = decodeHtmlEntities(noTags);
-  const normalizedLines = decoded
-    .split("\n")
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter((line) => line.length > 0)
-    .filter((line) => !isLikelyBannerLine(line));
-
-  // flat text version for debug output
-  const cleanedText = normalizedLines.join("\n").replace(/\n{3,}/g, "\n\n").slice(0, 50000);
-  const blocks = buildPolicyBlocks(normalizedLines);
+  const best = chooseBestExtraction(candidates);
 
   return {
-    cleanedText,
-    blocks
+    title,
+    cleanedText: best.cleanedText,
+    blocks: best.blocks,
+    extraction: {
+      strategy: best.meta.strategy,
+      title,
+      htmlLength: html.length,
+      candidateCount: candidates.length,
+      candidates: candidates.map((candidate) => candidate.meta)
+    }
   };
 }
 
@@ -194,11 +207,17 @@ function isolatePolicyRegion(html) {
   for (const pattern of regionPatterns) {
     const match = html.match(pattern);
     if (match?.[0]) {
-      return match[0];
+      return {
+        html: match[0],
+        source: pattern.source
+      };
     }
   }
 
-  return html;
+  return {
+    html,
+    source: "full-html"
+  };
 }
 
 function isLikelyBannerLine(line) {
@@ -218,4 +237,97 @@ function decodeHtmlEntities(text) {
     .replace(/&#39;/gi, "'")
     .replace(/&quot;/gi, "\"")
     .replace(/&#(\d+);/g, (_m, num) => String.fromCharCode(Number(num)));
+}
+
+function runExtractionCandidate(html, options) {
+  const region = options.isolateRegion ? isolatePolicyRegion(html) : getBodyRegion(html);
+  const baseRegion = stripAlwaysNoise(region.html);
+  const withoutNoiseBlocks = options.stripStructuralNoise ? stripStructuralNoise(baseRegion) : baseRegion;
+
+  // keep structure markers so later chunking and summaries have better context
+  const structured = withoutNoiseBlocks
+    .replace(/<h1[^>]*>/gi, "\n\n# ")
+    .replace(/<h2[^>]*>/gi, "\n\n## ")
+    .replace(/<h3[^>]*>/gi, "\n\n### ")
+    .replace(/<h4[^>]*>/gi, "\n\n#### ")
+    .replace(/<\/h[1-6]>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "\n- ")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<(p|div|section|article|ul|ol|br|tr|td|th)[^>]*>/gi, "\n")
+    .replace(/<\/(p|div|section|article|ul|ol|br|tr|td|th)>/gi, "\n");
+
+  const noTags = structured.replace(/<[^>]+>/g, " ");
+  const decoded = decodeHtmlEntities(noTags);
+  const normalizedLines = decoded
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => !isLikelyBannerLine(line));
+
+  const cleanedText = normalizedLines.join("\n").replace(/\n{3,}/g, "\n\n").slice(0, 50000);
+  const blocks = buildPolicyBlocks(normalizedLines);
+
+  return {
+    cleanedText,
+    blocks,
+    meta: {
+      strategy: options.strategy,
+      regionSource: region.source,
+      regionLength: region.html.length,
+      afterNoiseLength: withoutNoiseBlocks.length,
+      structuredLength: structured.length,
+      noTagsLength: noTags.length,
+      decodedLength: decoded.length,
+      lineCount: normalizedLines.length,
+      cleanedLength: cleanedText.length,
+      blockCount: blocks.length,
+      snippet: cleanedText.slice(0, 200)
+    }
+  };
+}
+
+function chooseBestExtraction(candidates) {
+  // prefer the richest non-empty extraction instead of trusting the first strategy blindly
+  return [...candidates].sort((a, b) => scoreExtractionCandidate(b) - scoreExtractionCandidate(a))[0];
+}
+
+function scoreExtractionCandidate(candidate) {
+  const lineScore = Math.min(candidate.meta.lineCount, 200);
+  const blockScore = candidate.meta.blockCount * 80;
+  const textScore = Math.min(candidate.cleanedText.length, 50000);
+  return textScore + blockScore + lineScore;
+}
+
+function getBodyRegion(html) {
+  const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (match?.[1]) {
+    return {
+      html: match[1],
+      source: "body"
+    };
+  }
+
+  return {
+    html,
+    source: "full-html"
+  };
+}
+
+function stripAlwaysNoise(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<svg[\s\S]*?<\/svg>/gi, " ");
+}
+
+function stripStructuralNoise(html) {
+  return html
+    .replace(/<(nav|footer|header|aside|form|button|dialog)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<(div|section|aside)[^>]*(cookie|consent|gdpr|ccpa|onetrust|trustarc)[^>]*>[\s\S]*?<\/\1>/gi, " ");
+}
+
+function extractTitle(html) {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return match?.[1] ? decodeHtmlEntities(match[1].replace(/\s+/g, " ").trim()) : "";
 }

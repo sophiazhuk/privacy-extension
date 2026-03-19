@@ -6,6 +6,8 @@ const policyUrlAnchor = document.getElementById("policyUrl");
 const statusText = document.getElementById("status");
 const fetchedText = document.getElementById("fetchedText");
 const aiOutput = document.getElementById("aiOutput");
+const debugDump = document.getElementById("debugDump");
+const copyDebugBtn = document.getElementById("copyDebugBtn");
 const reportPanel = document.getElementById("reportPanel");
 const reportSummary = document.getElementById("reportSummary");
 const reportCategories = document.getElementById("reportCategories");
@@ -17,12 +19,14 @@ const manualPolicyUrlInput = document.getElementById("manualPolicyUrl");
 const manualUrlBtn = document.getElementById("manualUrlBtn");
 
 let activeTab;
+let lastDebugState = createDebugState();
 
 init().catch((err) => setStatus(err.message, true));
 
 // find policy, fetch text preview, open extension settings
 findPolicyBtn.addEventListener("click", onFindPolicyClicked);
 settingsBtn.addEventListener("click", () => chrome.runtime.openOptionsPage());
+copyDebugBtn.addEventListener("click", onCopyDebugClicked);
 manualUrlBtn.addEventListener("click", onManualUrlSubmit);
 manualPolicyUrlInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
@@ -51,11 +55,22 @@ async function init() {
   activeTab = tab;
   const hostname = new URL(tab.url).hostname;
   domainText.textContent = hostname;
+  setDebugState({
+    activeTabUrl: tab.url,
+    activeTabId: tab.id,
+    hostname,
+    status: "ready"
+  });
 }
 
 async function onFindPolicyClicked() {
   // policy URL discovery entry point
   setStatus("scanning links for a privacy policy...");
+  setDebugState({
+    runStartedAt: new Date().toISOString(),
+    scan: { status: "started" },
+    error: ""
+  });
 
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId: activeTab.id },
@@ -65,6 +80,9 @@ async function onFindPolicyClicked() {
   // if all fallback stages fail, error
   if (!result?.bestUrl) {
     setStatus("no policy link detected on-page, homepage, or common paths.", true);
+    setDebugState({
+      scan: { status: "not_found", stage: result?.stage || "none", bestUrl: "" }
+    });
     hideReportPanel();
     showManualUrlInput();
     return;
@@ -78,6 +96,14 @@ async function onFindPolicyClicked() {
     homepage_scan: "homepage",
     common_path_probe: "common path probe"
   }[result.stage] || "fallback";
+  setDebugState({
+    scan: {
+      status: "found",
+      stage: result.stage,
+      stageLabel,
+      bestUrl: result.bestUrl
+    }
+  });
 
   setStatus(`policy URL detected (${stageLabel}). fetching policy text...`);
   await summarizeCurrentPolicy();
@@ -94,6 +120,12 @@ async function summarizeCurrentPolicy() {
 
   hideReportPanel();
   setStatus("fetching policy text...");
+  setDebugState({
+    policyUrl,
+    fetch: { status: "started" },
+    gemini: { status: "idle" },
+    error: ""
+  });
 
   try {
     const data = await runtimeMessage({
@@ -104,21 +136,73 @@ async function summarizeCurrentPolicy() {
     const cleanedText = data.cleanedText || "";
     fetchedText.textContent = cleanedText;
     aiOutput.textContent = "";
+    setDebugState({
+      policyUrl: data.policyUrl || policyUrl,
+      fetch: {
+        status: "ok",
+        contentType: data.contentType || "",
+        rawLength: data.rawLength || 0,
+        cleanedLength: data.cleanedLength || cleanedText.length,
+        blockCount: Array.isArray(data.blocks) ? data.blocks.length : 0,
+        title: data.title || "",
+        extraction: data.extraction || {}
+      }
+    });
+
+    if (!cleanedText.trim()) {
+      hideReportPanel();
+      aiOutput.textContent =
+        "We fetched the page, but could not extract readable policy text. Check the debug dump for extraction details.";
+      setStatus("Could not extract readable policy text from this page.", true);
+      setDebugState({
+        error: "empty extracted policy text"
+      });
+      return;
+    }
 
     // build the internal report first, then let Gemini rewrite it into the final user-facing version
     const fallbackReport = buildPrivacyReport({ policyText: cleanedText, blocks: data.blocks || [] });
+    setDebugState({
+      heuristic: {
+        categoryCount: Array.isArray(fallbackReport.categories) ? fallbackReport.categories.length : 0,
+        unknownCount: Array.isArray(fallbackReport.unknowns) ? fallbackReport.unknowns.length : 0,
+        topSummary: fallbackReport.top_summary || ""
+      }
+    });
 
     const settings = await runtimeMessage({ type: "GET_SETTINGS" });
     const apiKey = (settings?.apiKey || "").trim();
+    setDebugState({
+      gemini: {
+        status: "ready",
+        apiKeyPresent: Boolean(apiKey),
+        apiKeyLength: apiKey.length
+      }
+    });
 
     if (!apiKey) {
-      aiOutput.textContent = "Add a valid Gemini API key in settings to generate the privacy report.";
-      setStatus("Add a valid Gemini API key in settings.", true);
+      aiOutput.textContent = "There is something wrong with the API key. Add a valid Gemini API key in settings to generate the privacy report.";
+      setStatus("There is something wrong with the API key. Add a valid Gemini API key in settings.", true);
+      setDebugState({
+        gemini: {
+          status: "missing_key",
+          apiKeyPresent: false,
+          apiKeyLength: 0
+        },
+        error: "missing API key"
+      });
       hideManualUrlInput();
       return;
     }
 
     setStatus("sending policy text to Gemini...");
+    setDebugState({
+      gemini: {
+        status: "started",
+        apiKeyPresent: true,
+        apiKeyLength: apiKey.length
+      }
+    });
 
     try {
       const result = await sendPrompt({ apiKey, baseReport: fallbackReport });
@@ -130,16 +214,42 @@ async function summarizeCurrentPolicy() {
       });
       aiOutput.textContent = result.rawText || "Gemini returned an empty response.";
       setStatus("Gemini report loaded.");
+      setDebugState({
+        gemini: {
+          status: "ok",
+          apiKeyPresent: true,
+          apiKeyLength: apiKey.length,
+          model: result.model || "",
+          rawTextLength: (result.rawText || "").length
+        },
+        renderedReport: {
+          categoryCount: Array.isArray(result.report?.categories) ? result.report.categories.length : 0,
+          unknownCount: Array.isArray(result.report?.unknowns) ? result.report.unknowns.length : 0,
+          topSummary: result.report?.top_summary || ""
+        }
+      });
     } catch (error) {
       hideReportPanel();
-      aiOutput.textContent = `Gemini request failed. Check your API key in settings.\n\n${error.message}`;
-      setStatus("Gemini request failed. Check your API key in settings.", true);
+      aiOutput.textContent = `There is something wrong with the API key. Check your API key in settings.\n\n${error.message}`;
+      setStatus("There is something wrong with the API key. Check your API key in settings.", true);
+      setDebugState({
+        gemini: {
+          status: "error",
+          apiKeyPresent: true,
+          apiKeyLength: apiKey.length
+        },
+        error: String(error.message || error)
+      });
     }
 
     hideManualUrlInput();
   } catch (error) {
     hideReportPanel();
     setStatus(error.message, true);
+    setDebugState({
+      fetch: { status: "error" },
+      error: String(error.message || error)
+    });
     showManualUrlInput();
   }
 }
@@ -166,12 +276,14 @@ function setPolicyUrl(url) {
   policyUrlAnchor.textContent = url;
 // update policy URL in popup
   policyUrlAnchor.href = url;
+  setDebugState({ policyUrl: url });
 }
 
 function setStatus(text, isError = false) {
   statusText.textContent = text;
 // Update status message in popup UI
   statusText.style.color = isError ? "red" : "black";
+  setDebugState({ status: text, statusIsError: isError });
 }
 
 function showManualUrlInput() {
@@ -188,6 +300,7 @@ function hideReportPanel() {
   reportSummary.innerHTML = "";
   reportCategories.innerHTML = "";
   reportUnknowns.innerHTML = "";
+  setDebugState({ reportVisible: false });
 }
 
 function normalizeManualUrl(value) {
@@ -205,6 +318,45 @@ async function runtimeMessage(message) {
     throw new Error(response?.error ?? "runtime error.");
   }
   return response.data;
+}
+
+async function onCopyDebugClicked() {
+  try {
+    await navigator.clipboard.writeText(debugDump.value);
+    setStatus("debug dump copied.");
+  } catch {
+    setStatus("could not copy debug dump.", true);
+  }
+}
+
+function createDebugState() {
+  return {
+    timestamp: new Date().toISOString(),
+    status: "",
+    statusIsError: false,
+    activeTabId: null,
+    activeTabUrl: "",
+    hostname: "",
+    policyUrl: "",
+    reportVisible: false,
+    scan: {},
+    fetch: {},
+    heuristic: {},
+    gemini: {},
+    renderedReport: {},
+    error: ""
+  };
+}
+
+function setDebugState(partialState) {
+  // keep a single copy-pasteable object so bug reports include the whole run in one place
+  lastDebugState = {
+    ...lastDebugState,
+    ...partialState,
+    timestamp: new Date().toISOString(),
+    reportVisible: !reportPanel.classList.contains("hidden")
+  };
+  debugDump.value = JSON.stringify(lastDebugState, null, 2);
 }
 
 async function findPolicyUrlWithFallback() {

@@ -53,6 +53,7 @@ export async function sendPrompt({ apiKey, baseReport }) {
   validateModelRewrite(parsed, baseReport);
 
   return {
+    model,
     rawText: responseText,
     report: normalizePrivacyReport(mergeRewrites(baseReport, parsed))
   };
