@@ -191,6 +191,7 @@ export function renderPrivacyReport(report, elements) {
 
   reportSummary.innerHTML = `
     <div class="report-hero">
+      <h2>Privacy Report</h2>
       <p class="report-summary">${escapeHtml(report.top_summary)}</p>
       <ul class="report-flags">${report.top_flags.map((flag) => `<li>${escapeHtml(flag)}</li>`).join("")}</ul>
     </div>

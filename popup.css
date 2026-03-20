@@ -229,7 +229,18 @@ pre,
   min-height: 18px;
   color: var(--dark-gray);
 }
+.report-hero h2{
+  margin-top: 0px;
+}
 
+#reportSummary {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--light-blue);
+  margin-bottom: 8px;
+}
+#reportUnknowns {
+  padding-top: 8px;
+}
 #reportSummary,
 #reportCategories,
 #reportUnknowns {
@@ -240,7 +251,7 @@ pre,
 .report-hero {
   border: 1px solid var(--light-blue);
   border-radius: 6px;
-  background: linear-gradient(180deg, #ffffff 0%, var(--cream) 100%);
+  background: #fff;
   padding: 10px;
 }
 

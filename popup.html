@@ -16,7 +16,7 @@
       <p>Current site: <strong id="domainText">...</strong></p>
       <p>
         Policy URL:
-        <a id="policyUrl" href="#" target="_blank" rel="noreferrer">not found yet</a>
+        <a id="policyUrl" href="#" target="_blank" rel="noreferrer">Not Found Yet</a>
       </p>
 
       <p>
@@ -24,20 +24,19 @@
       </p>
 
       <section id="manualUrlSection" class="panel-section hidden">
-        <label for="manualPolicyUrl">add policy URL manually</label>
+        <label for="manualPolicyUrl">Add Policy URL Manually</label>
         <input
           id="manualPolicyUrl"
           type="url"
           placeholder="Enter policy URL"
           inputmode="url"
         />
-        <button id="manualUrlBtn" type="button">use this URL</button>
+        <button id="manualUrlBtn" type="button">Use this URL</button>
       </section>
 
       <p id="status"></p>
 
       <section id="reportPanel" class="panel-section hidden">
-        <h2>Privacy Report</h2>
         <div id="reportSummary"></div>
         <div id="reportCategories"></div>
         <div id="reportUnknowns"></div>
@@ -48,19 +47,19 @@
 
         <section class="debug-section">
           <div class="debug-header">
-            <h2>debug dump</h2>
+            <h2>Debug Dump</h2>
             <button id="copyDebugBtn" class="secondary-button" type="button">copy</button>
           </div>
           <textarea id="debugDump" readonly spellcheck="false"></textarea>
         </section>
 
         <section class="debug-section">
-          <h2>ai output</h2>
+          <h2>AI Output</h2>
           <pre id="aiOutput"></pre>
         </section>
 
         <section class="debug-section">
-          <h2>fetched policy text</h2>
+          <h2>Fetched Policy Text</h2>
           <pre id="fetchedText"></pre>
         </section>
       </details>
