@@ -11,20 +11,20 @@ const MODEL = "gemini-2.5-flash-lite";
 
 export async function sendPrompt({ apiKey, baseReport, blocks }) {
   if (!apiKey) {
-    throw new Error("missing API key");
+    throw createGeminiError("auth", "missing API key");
   }
 
   if (!baseReport || !Array.isArray(baseReport.categories)) {
-    throw new Error("missing base report");
+    throw createGeminiError("input", "missing base report");
   }
 
   if (!Array.isArray(blocks) || blocks.length === 0) {
-    throw new Error("missing policy blocks");
+    throw createGeminiError("input", "missing policy blocks");
   }
 
   const promptBlocks = buildPromptBlocks(blocks);
   if (promptBlocks.length === 0) {
-    throw new Error("no usable policy blocks for Gemini");
+    throw createGeminiError("input", "no usable policy blocks for Gemini");
   }
 
   const response = await fetch(buildEndpoint(apiKey), {
@@ -37,16 +37,29 @@ export async function sendPrompt({ apiKey, baseReport, blocks }) {
         responseMimeType: "application/json"
       }
     })
+  }).catch((error) => {
+    throw createGeminiError("http", error.message || "network error");
   });
 
-  const body = await response.json();
+  const body = await response.json().catch(() => {
+    throw createGeminiError("json_parse", "Gemini returned a non-JSON response body.");
+  });
+
   if (!response.ok) {
-    throw new Error(body?.error?.message || `${response.status}`);
+    throw createGeminiError(classifyHttpError(response.status, body?.error?.message), body?.error?.message || `${response.status}`);
   }
 
   const responseText = body?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  const parsed = JSON.parse(stripCodeFence(responseText));
-  validateModelInterpretation(parsed, promptBlocks);
+  if (!responseText.trim()) {
+    throw createGeminiError("empty_response", "Gemini returned an empty response.");
+  }
+
+  const parsed = parseGeminiJson(responseText);
+  try {
+    validateModelInterpretation(parsed, promptBlocks);
+  } catch (error) {
+    throw createGeminiError("validation", error.message || "Gemini returned an incomplete report.");
+  }
 
   return {
     model: MODEL,
@@ -62,4 +75,29 @@ function buildEndpoint(apiKey) {
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent` +
     `?key=${encodeURIComponent(apiKey)}`
   );
+}
+
+function parseGeminiJson(responseText) {
+  try {
+    return JSON.parse(stripCodeFence(responseText));
+  } catch {
+    throw createGeminiError("json_parse", "Gemini returned invalid JSON.");
+  }
+}
+
+function classifyHttpError(status, message) {
+  const lowerMessage = String(message || "").toLowerCase();
+  if (status === 401 || status === 403 || lowerMessage.includes("api key")) {
+    return "auth";
+  }
+  if (status === 429 || lowerMessage.includes("quota")) {
+    return "quota";
+  }
+  return "http";
+}
+
+function createGeminiError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
 }

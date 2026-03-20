@@ -239,13 +239,16 @@ async function summarizeCurrentPolicy() {
       });
     } catch (error) {
       hideReportPanel();
-      aiOutput.textContent = `There is something wrong with the API key. Check your API key in settings.\n\n${error.message}`;
-      setStatus("There is something wrong with the API key. Check your API key in settings.", true);
+      const geminiErrorType = getGeminiErrorType(error);
+      const userMessage = getGeminiErrorMessage(geminiErrorType);
+      aiOutput.textContent = `${userMessage}\n\n${error.message}`;
+      setStatus(userMessage, true);
       setDebugState({
         gemini: {
           status: "error",
           apiKeyPresent: true,
-          apiKeyLength: apiKey.length
+          apiKeyLength: apiKey.length,
+          errorType: geminiErrorType
         },
         error: String(error.message || error)
       });
@@ -382,6 +385,31 @@ function summarizeDebugCategories(categories) {
     exampleCount: Array.isArray(category?.examples) ? category.examples.length : 0,
     evidenceCount: Array.isArray(category?.evidence) ? category.evidence.length : 0
   }));
+}
+
+function getGeminiErrorType(error) {
+  return typeof error?.code === "string" ? error.code : "unknown";
+}
+
+function getGeminiErrorMessage(errorType) {
+  switch (errorType) {
+    case "auth":
+      return "There is something wrong with the API key. Check your API key in settings.";
+    case "quota":
+      return "Gemini quota was exceeded. Check your plan or try again later.";
+    case "validation":
+      return "Gemini returned an incomplete report.";
+    case "json_parse":
+      return "Gemini returned an unreadable response.";
+    case "empty_response":
+      return "Gemini returned an empty response.";
+    case "input":
+      return "There was not enough usable policy text to send to Gemini.";
+    case "http":
+      return "Gemini request failed before a valid report was returned.";
+    default:
+      return "Gemini failed before the report could be generated.";
+  }
 }
 
 async function findPolicyUrlWithFallback() {
