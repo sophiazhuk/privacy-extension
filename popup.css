@@ -276,13 +276,29 @@ pre,
   list-style: none;
   cursor: pointer;
   padding: 10px;
+  padding-right: 28px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
 }
 
 .report-card summary::-webkit-details-marker {
   display: none;
+}
+
+.report-card > summary::after {
+  content: "▸";
+  position: absolute;
+  right: 10px;
+  top: 18px;
+  color: var(--blue);
+  font-size: 25px;
+  line-height: 1;
+}
+
+.report-card[open] > summary::after {
+  content: "▾";
 }
 
 .category-name {
