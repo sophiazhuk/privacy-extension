@@ -6,7 +6,7 @@
 3. turn on developer mode
 4. "load unpacked" in top left
 5. select this folder
-6. generate a gemini API key [here]([url](https://ai.google.dev/gemini-api/docs/api-key?authuser=1))
+6. generate a gemini API key [here](https://ai.google.dev/gemini-api/docs/api-key?authuser=1)
 7. paste the key and save in the settings, top-right of the extension popup
 
 
