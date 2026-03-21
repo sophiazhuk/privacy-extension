@@ -13,6 +13,9 @@
 - background.js: extension service worker
 - popup.html, popup.js: main extension UI popup
 - options.html, options.js: extension settings management
+- output-structure.js: heuristic privacy report generation and rendering helpers
+- ai.js: Gemini request layer and error handling
+- ai-report-interpretation.js: prompt building, response validation, and report merge logic
 
 ## How does it work
 - detects a website’s privacy policy page by scanning the current page, homepage, and fallback locations
